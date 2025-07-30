@@ -21,8 +21,8 @@ const PendingStores = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [imageFile, setImageFile] = useState(null);
 
+  // Fetch Pending Stores
   const fetchStores = useCallback(async () => {
     const from = (currentPage - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -48,6 +48,7 @@ const PendingStores = () => {
     }
   }, [selectedCity, selectedArea, selectedColony, selectedCategory, currentPage]);
 
+  // Fetch Dropdown Data
   const fetchDropdowns = async () => {
     const { data: cityData } = await supabase.from('cities').select('*');
     const { data: areaData } = await supabase.from('areas').select('*');
@@ -64,67 +65,40 @@ const PendingStores = () => {
     fetchStores();
   }, [fetchStores]);
 
-  const filteredStores = stores.filter(store =>
-    store.store_name?.toLowerCase().includes(search.toLowerCase()) ||
-    store.store_id?.toLowerCase().includes(search.toLowerCase())
+  const filteredStores = stores.filter(
+    (store) =>
+      store.store_name?.toLowerCase().includes(search.toLowerCase()) ||
+      store.store_id?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const resolveName = (list, id) => list.find(item => item.id === id)?.name || id;
+  const totalPages = Math.ceil(totalCount / pageSize);
 
-  const handleStatusChange = async (storeId, newStatus) => {
-    const { error } = await supabase
-      .from('stores')
-      .update({ approval_status: newStatus })
-      .eq('store_id', storeId);
-
-    if (error) {
-      alert('❌ Failed to update status: ' + error.message);
-    } else {
-      alert('✅ Status updated successfully!');
-      fetchStores();
-    }
-  };
-
+  // Handle field changes
   const handleEditChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setSelectedStore(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
+    const { name, value } = e.target;
+    setSelectedStore((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleFileUpload = async () => {
-    if (!imageFile || !selectedStore) return null;
-    const fileName = `${selectedStore.store_id}-${Date.now()}.jpg`;
-
-    const { data, error } = await supabase.storage
-      .from('store-images')
-      .upload(fileName, imageFile);
-
-    if (error) {
-      alert('❌ Image upload failed: ' + error.message);
-      return null;
+  // Handle Image Upload
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedStore) return;
+    const filePath = `store_images/${selectedStore.store_id}_${file.name}`;
+    const { error } = await supabase.storage.from('store-images').upload(filePath, file, { upsert: true });
+    if (!error) {
+      const { data: publicData } = supabase.storage.from('store-images').getPublicUrl(filePath);
+      setSelectedStore((prev) => ({ ...prev, image_url: publicData.publicUrl }));
+    } else {
+      alert('Image upload failed: ' + error.message);
     }
-
-    const { data: urlData } = supabase.storage
-      .from('store-images')
-      .getPublicUrl(fileName);
-
-    return urlData.publicUrl;
   };
 
+  // Save Changes
   const handleSaveChanges = async () => {
-    let imageUrl = selectedStore.image_url;
-    if (imageFile) {
-      const uploadedUrl = await handleFileUpload();
-      if (uploadedUrl) imageUrl = uploadedUrl;
-    }
-
-    const updatedData = { ...selectedStore, image_url: imageUrl };
-
+    if (!selectedStore) return;
     const { error } = await supabase
       .from('stores')
-      .update(updatedData)
+      .update(selectedStore)
       .eq('store_id', selectedStore.store_id);
 
     if (error) {
@@ -132,12 +106,9 @@ const PendingStores = () => {
     } else {
       alert('✅ Changes saved successfully!');
       setSelectedStore(null);
-      setImageFile(null);
       fetchStores();
     }
   };
-
-  const totalPages = Math.ceil(totalCount / pageSize);
 
   return (
     <div style={{ padding: '20px' }}>
@@ -146,43 +117,43 @@ const PendingStores = () => {
       {/* Filters */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
         <Select
-          options={cities.map(city => ({ value: city.id, label: city.name }))}
+          options={cities.map((city) => ({ value: city.id, label: city.name }))}
           value={selectedCity}
           onChange={(v) => { setSelectedCity(v); setSelectedArea(null); setSelectedColony(null); setCurrentPage(1); }}
           placeholder="Select City"
           isClearable
-          styles={{ container: base => ({ ...base, minWidth: 200 }) }}
+          styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
         <Select
           options={areas
-            .filter(a => !selectedCity || a.city_id === selectedCity.value)
-            .map(area => ({ value: area.id, label: area.name }))}
+            .filter((a) => !selectedCity || a.city_id === selectedCity.value)
+            .map((area) => ({ value: area.id, label: area.name }))}
           value={selectedArea}
           onChange={(v) => { setSelectedArea(v); setSelectedColony(null); setCurrentPage(1); }}
           placeholder="Select Area"
           isClearable
-          styles={{ container: base => ({ ...base, minWidth: 200 }) }}
+          styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
         <Select
           options={colonies
-            .filter(c => !selectedArea || c.area_id === selectedArea.value)
-            .map(colony => ({ value: colony.id, label: colony.name }))}
+            .filter((c) => !selectedArea || c.area_id === selectedArea.value)
+            .map((colony) => ({ value: colony.id, label: colony.name }))}
           value={selectedColony}
           onChange={(v) => { setSelectedColony(v); setCurrentPage(1); }}
           placeholder="Select Colony"
           isClearable
-          styles={{ container: base => ({ ...base, minWidth: 200 }) }}
+          styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
         <Select
-          options={categories.map(cat => ({ value: cat.id, label: cat.name }))}
+          options={categories.map((cat) => ({ value: cat.id, label: cat.name }))}
           value={selectedCategory}
           onChange={(v) => { setSelectedCategory(v); setCurrentPage(1); }}
           placeholder="Select Category"
           isClearable
-          styles={{ container: base => ({ ...base, minWidth: 200 }) }}
+          styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
         <input
@@ -205,11 +176,10 @@ const PendingStores = () => {
             <th>Status</th>
             <th>Submitted By</th>
             <th>Info</th>
-            <th>Change Status</th>
           </tr>
         </thead>
         <tbody>
-          {filteredStores.map(store => (
+          {filteredStores.map((store) => (
             <tr key={store.store_id}>
               <td>{store.store_id}</td>
               <td>{store.store_name}</td>
@@ -217,17 +187,7 @@ const PendingStores = () => {
               <td>{store.contact_number}</td>
               <td>{store.approval_status}</td>
               <td>{store.submitted_by}</td>
-              <td><button onClick={() => setSelectedStore(store)}>More Info</button></td>
-              <td>
-                <select
-                  value={store.approval_status}
-                  onChange={(e) => handleStatusChange(store.store_id, e.target.value)}
-                >
-                  <option value="approved">Approve</option>
-                  <option value="pending">Pending</option>
-                  <option value="rejected">Reject</option>
-                </select>
-              </td>
+              <td><button onClick={() => setSelectedStore(store)}>Edit</button></td>
             </tr>
           ))}
         </tbody>
@@ -236,13 +196,9 @@ const PendingStores = () => {
       {/* Pagination */}
       {totalPages > 1 && (
         <div style={{ marginTop: '20px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button onClick={() => setCurrentPage(p => Math.max(p - 1, 1))} disabled={currentPage === 1}>
-            ◀ Prev
-          </button>
+          <button onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))} disabled={currentPage === 1}>◀ Prev</button>
           <span>Page {currentPage} of {totalPages}</span>
-          <button onClick={() => setCurrentPage(p => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>
-            Next ▶
-          </button>
+          <button onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))} disabled={currentPage === totalPages}>Next ▶</button>
         </div>
       )}
 
@@ -258,37 +214,38 @@ const PendingStores = () => {
             width: '600px', borderRadius: '8px', position: 'relative'
           }}>
             <button style={{ position: 'absolute', top: 10, right: 10 }} onClick={() => setSelectedStore(null)}>X</button>
-            <h3>Edit Pending Store: {selectedStore.store_name}</h3>
+            <h3>Edit Store: {selectedStore.store_name}</h3>
 
-            {Object.entries(selectedStore).map(([key, value]) => (
-              <div key={key} style={{ marginBottom: '10px' }}>
-                <label><strong>{key.replace(/_/g, ' ')}:</strong></label>
-                {typeof value === 'boolean' ? (
-                  <input
-                    type="checkbox"
-                    name={key}
-                    checked={value}
-                    onChange={handleEditChange}
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    name={key}
-                    value={value || ''}
-                    onChange={handleEditChange}
-                    style={{ width: '100%' }}
-                  />
-                )}
-              </div>
-            ))}
+            <label>Store Name:</label>
+            <input name="store_name" value={selectedStore.store_name || ''} onChange={handleEditChange} /><br />
 
-            <label>Upload Image:</label><br />
-            <input type="file" accept="image/*" onChange={(e) => setImageFile(e.target.files[0])} /><br /><br />
+            <label>Owner Name:</label>
+            <input name="owner_name" value={selectedStore.owner_name || ''} onChange={handleEditChange} /><br />
 
-            <button
-              onClick={handleSaveChanges}
-              style={{ backgroundColor: '#4CAF50', color: '#fff', padding: '8px 16px', border: 'none' }}
-            >
+            <label>Phone:</label>
+            <input name="contact_number" value={selectedStore.contact_number || ''} onChange={handleEditChange} /><br />
+
+            <label>WhatsApp:</label>
+            <input name="whatsapp_number" value={selectedStore.whatsapp_number || ''} onChange={handleEditChange} /><br />
+
+            <label>Full Address:</label>
+            <input name="full_address" value={selectedStore.full_address || ''} onChange={handleEditChange} /><br />
+
+            <label>Description:</label>
+            <textarea name="description" value={selectedStore.description || ''} onChange={handleEditChange} /><br />
+
+            <label>Upload Image:</label>
+            <input type="file" onChange={handleImageUpload} /><br />
+            {selectedStore.image_url && <img src={selectedStore.image_url} alt="Store" style={{ width: '100%', marginTop: '10px' }} />}
+
+            <label>Status:</label>
+            <select name="approval_status" value={selectedStore.approval_status || ''} onChange={handleEditChange}>
+              <option value="pending">Pending</option>
+              <option value="approved">Approved</option>
+              <option value="rejected">Rejected</option>
+            </select><br /><br />
+
+            <button onClick={handleSaveChanges} style={{ backgroundColor: '#4CAF50', color: '#fff', padding: '8px 16px', border: 'none' }}>
               Save Changes
             </button>
           </div>
