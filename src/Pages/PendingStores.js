@@ -22,7 +22,7 @@ const PendingStores = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Fetch Pending Stores
+  // Fetch stores
   const fetchStores = useCallback(async () => {
     const from = (currentPage - 1) * pageSize;
     const to = from + pageSize - 1;
@@ -48,7 +48,6 @@ const PendingStores = () => {
     }
   }, [selectedCity, selectedArea, selectedColony, selectedCategory, currentPage]);
 
-  // Fetch Dropdown Data
   const fetchDropdowns = async () => {
     const { data: cityData } = await supabase.from('cities').select('*');
     const { data: areaData } = await supabase.from('areas').select('*');
@@ -73,24 +72,43 @@ const PendingStores = () => {
 
   const totalPages = Math.ceil(totalCount / pageSize);
 
-  // Handle field changes
+  // Edit store field change
   const handleEditChange = (e) => {
-    const { name, value } = e.target;
-    setSelectedStore((prev) => ({ ...prev, [name]: value }));
+    const { name, value, type, checked } = e.target;
+    let val = type === 'checkbox' ? checked : value;
+    if (['latitude', 'longitude', 'rating_sum', 'rating_count'].includes(name)) {
+      val = parseFloat(val) || 0;
+    }
+    setSelectedStore((prev) => ({ ...prev, [name]: val }));
   };
 
-  // Handle Image Upload
+  // Handle image upload
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file || !selectedStore) return;
     const filePath = `store_images/${selectedStore.store_id}_${file.name}`;
+
+    // Delete old image if exists
+    if (selectedStore.image_url) {
+      const oldPath = selectedStore.image_url.split('/').pop();
+      await supabase.storage.from('store-images').remove([`store_images/${oldPath}`]);
+    }
+
     const { error } = await supabase.storage.from('store-images').upload(filePath, file, { upsert: true });
     if (!error) {
-      const { data: publicData } = supabase.storage.from('store-images').getPublicUrl(filePath);
-      setSelectedStore((prev) => ({ ...prev, image_url: publicData.publicUrl }));
+      const { data } = supabase.storage.from('store-images').getPublicUrl(filePath);
+      setSelectedStore((prev) => ({ ...prev, image_url: data.publicUrl }));
     } else {
       alert('Image upload failed: ' + error.message);
     }
+  };
+
+  // Delete image
+  const handleDeleteImage = async () => {
+    if (!selectedStore?.image_url) return;
+    const fileName = selectedStore.image_url.split('/').pop();
+    await supabase.storage.from('store-images').remove([`store_images/${fileName}`]);
+    setSelectedStore((prev) => ({ ...prev, image_url: '' }));
   };
 
   // Save Changes
@@ -122,6 +140,7 @@ const PendingStores = () => {
           onChange={(v) => { setSelectedCity(v); setSelectedArea(null); setSelectedColony(null); setCurrentPage(1); }}
           placeholder="Select City"
           isClearable
+          isSearchable
           styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
@@ -133,6 +152,7 @@ const PendingStores = () => {
           onChange={(v) => { setSelectedArea(v); setSelectedColony(null); setCurrentPage(1); }}
           placeholder="Select Area"
           isClearable
+          isSearchable
           styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
@@ -144,6 +164,7 @@ const PendingStores = () => {
           onChange={(v) => { setSelectedColony(v); setCurrentPage(1); }}
           placeholder="Select Colony"
           isClearable
+          isSearchable
           styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
@@ -153,6 +174,7 @@ const PendingStores = () => {
           onChange={(v) => { setSelectedCategory(v); setCurrentPage(1); }}
           placeholder="Select Category"
           isClearable
+          isSearchable
           styles={{ container: (base) => ({ ...base, minWidth: 200 }) }}
         />
 
@@ -216,35 +238,103 @@ const PendingStores = () => {
             <button style={{ position: 'absolute', top: 10, right: 10 }} onClick={() => setSelectedStore(null)}>X</button>
             <h3>Edit Store: {selectedStore.store_name}</h3>
 
-            <label>Store Name:</label>
-            <input name="store_name" value={selectedStore.store_name || ''} onChange={handleEditChange} /><br />
+            {[
+              ['store_name', 'Store Name'],
+              ['owner_name', 'Owner Name'],
+              ['contact_number', 'Phone'],
+              ['whatsapp_number', 'WhatsApp'],
+              ['full_address', 'Full Address'],
+              ['description', 'Description'],
+              ['instagram_link', 'Instagram Link'],
+              ['maps_url', 'Maps URL'],
+              ['tags', 'Tags'],
+              ['highlights', 'Highlights'],
+              ['submitted_by', 'Submitted By'],
+            ].map(([field, label]) => (
+              <div key={field}>
+                <label>{label}:</label><br />
+                <input name={field} value={selectedStore[field] || ''} onChange={handleEditChange} style={{ width: '100%' }} /><br />
+              </div>
+            ))}
 
-            <label>Owner Name:</label>
-            <input name="owner_name" value={selectedStore.owner_name || ''} onChange={handleEditChange} /><br />
+            <label>Open Days:</label><br />
+            <input name="open_days" value={selectedStore.open_days || ''} onChange={handleEditChange} style={{ width: '100%' }} /><br />
 
-            <label>Phone:</label>
-            <input name="contact_number" value={selectedStore.contact_number || ''} onChange={handleEditChange} /><br />
+            <label>Open Time:</label><br />
+            <input type="time" name="open_time" value={selectedStore.open_time || ''} onChange={handleEditChange} /><br />
 
-            <label>WhatsApp:</label>
-            <input name="whatsapp_number" value={selectedStore.whatsapp_number || ''} onChange={handleEditChange} /><br />
+            <label>Close Time:</label><br />
+            <input type="time" name="close_time" value={selectedStore.close_time || ''} onChange={handleEditChange} /><br />
 
-            <label>Full Address:</label>
-            <input name="full_address" value={selectedStore.full_address || ''} onChange={handleEditChange} /><br />
+            <label>Latitude:</label><br />
+            <input type="number" name="latitude" value={selectedStore.latitude || ''} onChange={handleEditChange} /><br />
 
-            <label>Description:</label>
-            <textarea name="description" value={selectedStore.description || ''} onChange={handleEditChange} /><br />
+            <label>Longitude:</label><br />
+            <input type="number" name="longitude" value={selectedStore.longitude || ''} onChange={handleEditChange} /><br />
 
-            <label>Upload Image:</label>
-            <input type="file" onChange={handleImageUpload} /><br />
-            {selectedStore.image_url && <img src={selectedStore.image_url} alt="Store" style={{ width: '100%', marginTop: '10px' }} />}
+            <label>Rating Sum:</label><br />
+            <input type="number" name="rating_sum" value={selectedStore.rating_sum || 0} onChange={handleEditChange} /><br />
 
-            <label>Status:</label>
+            <label>Rating Count:</label><br />
+            <input type="number" name="rating_count" value={selectedStore.rating_count || 0} onChange={handleEditChange} /><br />
+
+            <label>Premium:</label>
+            <input type="checkbox" name="is_premium" checked={selectedStore.is_premium || false} onChange={handleEditChange} /><br />
+
+            <label>Approval Status:</label><br />
             <select name="approval_status" value={selectedStore.approval_status || ''} onChange={handleEditChange}>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
               <option value="rejected">Rejected</option>
-            </select><br /><br />
+            </select><br />
 
+            {/* Linked dropdowns */}
+            <label>City:</label>
+            <Select
+              options={cities.map(city => ({ value: city.id, label: city.name }))}
+              value={cities.find(c => c.id === selectedStore.city_id) ? { value: selectedStore.city_id, label: cities.find(c => c.id === selectedStore.city_id).name } : null}
+              onChange={(v) => setSelectedStore(prev => ({ ...prev, city_id: v ? v.value : '' }))}
+              isSearchable
+              isClearable
+            /><br />
+
+            <label>Area:</label>
+            <Select
+              options={areas.filter(a => !selectedStore.city_id || a.city_id === selectedStore.city_id).map(area => ({ value: area.id, label: area.name }))}
+              value={areas.find(a => a.id === selectedStore.area_id) ? { value: selectedStore.area_id, label: areas.find(a => a.id === selectedStore.area_id).name } : null}
+              onChange={(v) => setSelectedStore(prev => ({ ...prev, area_id: v ? v.value : '' }))}
+              isSearchable
+              isClearable
+            /><br />
+
+            <label>Colony:</label>
+            <Select
+              options={colonies.filter(c => !selectedStore.area_id || c.area_id === selectedStore.area_id).map(colony => ({ value: colony.id, label: colony.name }))}
+              value={colonies.find(c => c.id === selectedStore.colony_id) ? { value: selectedStore.colony_id, label: colonies.find(c => c.id === selectedStore.colony_id).name } : null}
+              onChange={(v) => setSelectedStore(prev => ({ ...prev, colony_id: v ? v.value : '' }))}
+              isSearchable
+              isClearable
+            /><br />
+
+            <label>Category:</label>
+            <Select
+              options={categories.map(cat => ({ value: cat.id, label: cat.name }))}
+              value={categories.find(c => c.id === selectedStore.category_id) ? { value: selectedStore.category_id, label: categories.find(c => c.id === selectedStore.category_id).name } : null}
+              onChange={(v) => setSelectedStore(prev => ({ ...prev, category_id: v ? v.value : '' }))}
+              isSearchable
+              isClearable
+            /><br />
+
+            <label>Upload Image:</label>
+            <input type="file" onChange={handleImageUpload} /><br />
+            {selectedStore.image_url && (
+              <>
+                <img src={selectedStore.image_url} alt="Store" style={{ width: '100%', marginTop: '10px' }} />
+                <button onClick={handleDeleteImage} style={{ backgroundColor: 'red', color: 'white', marginTop: '5px' }}>Delete Image</button>
+              </>
+            )}
+
+            <br /><br />
             <button onClick={handleSaveChanges} style={{ backgroundColor: '#4CAF50', color: '#fff', padding: '8px 16px', border: 'none' }}>
               Save Changes
             </button>
